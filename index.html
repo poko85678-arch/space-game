@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Космический магазин штор - Игра</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #1a1613;
+            color: #f2ede4;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            overflow: hidden;
+        }
+        h1 { margin: 15px 0 5px; color: #c9a876; }
+        p { margin: 0 0 15px; color: #b8ada0; font-size: 14px; }
+        canvas {
+            background-color: #000;
+            border: 3px solid #7c5c3b;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(124, 92, 59, 0.5);
+            cursor: crosshair;
+            max-width: 95vw;
+            max-height: 75vh;
+        }
+        .back-btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #7c5c3b;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .back-btn:hover { background: #5a4128; }
+    </style>
+</head>
+<body>
+
+    <h1>Space Curtain Defense</h1>
+    <p>Управление: двигайте мышью вверх/вниз (или свайпом). Уворачивайтесь от астероидов!</p>
+    
+    <!-- Наш игровой холст -->
+    <canvas id="canvas" width="800" height="500"></canvas>
+    
+    <a href="index.html" class="back-btn">← Вернуться в магазин</a>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        // Настройки игры
+        let score = 0;
+        let gameOver = false;
+        let asteroids = [];
+        let stars = [];
+        let lastTimestamp = 0;
+        const SPEED = 0.4;
+
+        // Наш корабль (в виде шторы :)
+        const spaceCraft = {
+            x: 100, // Позиция по X (слева)
+            y: canvas.height / 2, // Позиция по Y (центр)
+            cursorY: canvas.height / 2,
+            width: 40,
+            height: 80,
+            speed: 6
+        };
+
+        // Генерация звезд для фона
+        for (let i = 0; i < 150; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2,
+                speed: Math.random() * 2 + 0.5
+            });
+        }
+
+        // Обработка движения мыши/пальца
+        function updateSpaceCraft(event) {
+            let clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            let rect = canvas.getBoundingClientRect();
+            spaceCraft.cursorY = clientY - rect.top;
+        }
+
+        canvas.addEventListener("mousemove", updateSpaceCraft);
+        canvas.addEventListener("touchmove", updateSpaceCraft, {passive: true});
+
+        // Сброс игры
+        function resetGame() {
+            spaceCraft.y = canvas.height / 2;
+            asteroids = [];
+            score = 0;
+            gameOver = false;
+            requestAnimationFrame(animate);
+        }
+
+        // Отрисовка корабля (с наклоном)
+        function drawSpaceCraft(x, y, tiltAngle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(tiltAngle * Math.PI / 180);
+
+            // Тень
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#c9a876";
+
+            // Корпус корабля
+            ctx.fillStyle = "#7c5c3b";
+            ctx.beginPath();
+            ctx.moveTo(30, 0); // Нос
+            ctx.lineTo(-20, -30); // Верхний угол
+            ctx.lineTo(-10, 0); // Центр
+            ctx.lineTo(-20, 30); // Нижний угол
+            ctx.closePath();
+            ctx.fill();
+
+            // Иллюминатор
+            ctx.fillStyle = "#c9a876";
+            ctx.beginPath();
+            ctx.arc(5, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Пламя двигателя
+            ctx.fillStyle = "orange";
+            ctx.beginPath();
+            ctx.moveTo(-20, -10);
+            ctx.lineTo(-40 - Math.random() * 20, 0);
+            ctx.lineTo(-20, 10);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Отрисовка астероида
+        function drawAsteroid(x, y, size) {
+            ctx.fillStyle = "#888";
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Логика астероидов
+        function updateAsteroids(timestamp) {
+            const deltaTime = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+
+            // Двигаем звезды
+            for (let star of stars) {
+                star.x -= star.speed;
+                if (star.x < 0) { star.x = canvas.width; star.y = Math.random() * canvas.height; }
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            }
+
+            // Двигаем астероиды
+            for (let i = asteroids.length - 1; i >= 0; i--) {
+                let ast = asteroids[i];
+                ast.x -= SPEED * deltaTime;
+                drawAsteroid(ast.x, ast.y, ast.size);
+
+                // Удаляем астероиды, улетевшие за экран, и даем очки
+                if (ast.x < -50) {
+                    asteroids.splice(i, 1);
+                    score += 1;
+                }
+            }
+
+            // Спавн новых астероидов
+            if (!gameOver && Math.random() < 0.03) {
+                asteroids.push({
+                    x: canvas.width + 50,
+                    y: Math.random() * (canvas.height - 40) + 20,
+                    size: Math.random() * 20 + 10 // от 10 до 30
+                });
+            }
+        }
+
+        // Проверка столкновений
+        function checkCollision() {
+            if (gameOver) return;
+            
+            for (let ast of asteroids) {
+                // Простая проверка на пересечение кругов
+                let dist = Math.hypot((spaceCraft.x) - ast.x, (spaceCraft.y) - ast.y);
+                if (dist < ast.size + 20) { // 20 - примерный радиус корабля
+                    gameOver = true;
+                    break;
+                }
+            }
+        }
+
+        // Главный игровой цикл
+        function animate(timestamp) {
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#ff4444";
+                ctx.font = "bold 40px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("ИГРА ОКОНЧЕНА", canvas.width / 2, canvas.height / 2 - 20);
+                ctx.fillStyle = "#fff";
+                ctx.font = "24px Arial";
+                ctx.fillText("Ваш счет: " + score, canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText("Нажмите, чтобы начать заново", canvas.width / 2, canvas.height / 2 + 70);
+                
+                canvas.onclick = () => { canvas.onclick = null; resetGame(); };
+                return;
+            }
+
+            // Очистка экрана (черный космос)
+            ctx.fillStyle = "#050505";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Обновление логики
+            updateAsteroids(timestamp);
+            checkCollision();
+
+            // Движение корабля к курсору
+            const direction = Math.sign(spaceCraft.cursorY - spaceCraft.y);
+            spaceCraft.y += direction * spaceCraft.speed;
+
+            // Наклон корабля
+            const tiltAngle = (spaceCraft.cursorY - spaceCraft.y) / canvas.height * 45;
+            
+            // Отрисовка
+            drawSpaceCraft(spaceCraft.x, spaceCraft.y, tiltAngle);
+
+            // Счет
+            ctx.fillStyle = "#c9a876";
+            ctx.font = "bold 24px Arial";
+            ctx.textAlign = "left";
+            ctx.fillText("Счет: " + score, 20, 40);
+
+            requestAnimationFrame(animate);
+        }
+
+        // Запуск
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
